@@ -3,19 +3,16 @@
 # saferm.sh
 # like unix 系统, 安全删除文件脚本
 # copy from: https://github.com/lagerspetz/linux-stuff/blob/master/scripts/saferm.sh
+# 添加可执行权限: chmod +x saferm.sh
 
 # 参数选项
 recursive=""    # 递归
 verbose="true"  # 详细信息
 unsafe=""       # 不安全删除
+clear=""        # 倾倒垃圾桶
 
 # 参数列表
-flaglist="r v u q"
-
-# 颜色
-blue='\e[1;34m'
-red='\e[1;31m'
-norm='\e[0m'
+flaglist="r v u q c"
 
 # 装载的文件系统，用于避免安全删除时的跨设备移动
 filesystems=$(mount | awk '{print $3;}')
@@ -25,13 +22,14 @@ trash="$HOME/.trash"
 
 # 使用方法提示
 usage_message() {
-    echo -e "${blue}saferm.sh$norm 用于安全删除文件，实际是mv操作. \n";
-    echo -e "Usage: ${blue}/path/to/saferm.sh$norm [${blue}OPTIONS$norm] [$blue--$norm] ${blue}files/dirs$norm"
-    echo -e "${blue}Options$norm:"
-    echo -e "$blue-r$norm      递归删除."
-    echo -e "$blue-u$norm      不安全模式, 将使用系统rm命令, 永久删除文件."
-    echo -e "$blue-v$norm      打印详细信息."
-    echo -e "$blue-q$norm      静音模式, 与冗长相反(-v)"
+    echo -e "saferm.sh 用于安全删除文件，实际是mv操作. \n";
+    echo -e "Usage: /path/to/saferm.sh [OPTIONS] [--] files/dirs"
+    echo -e "Options:"
+    echo -e "-r      递归删除."
+    echo -e "-u      不安全模式, 将使用系统rm命令, 永久删除文件."
+    echo -e "-v      打印详细信息."
+    echo -e "-q      静音模式, 与冗长相反(-v)"
+    echo -e "-c      清空垃圾桶"
 	echo "";
 }
 
@@ -58,6 +56,8 @@ set_flags() {
             unsafe="true"
         elif [ "$k" == "q" ]; then
             unset verbose
+        elif [ "$k" == "c" ]; then
+            clear="true"
         fi
     done
 }
@@ -100,7 +100,7 @@ ask_fs() {
     if [ "${fs}" != "${tfs}" ]; then
         unset answer;
         while true; do
-            echo -e "$blue$1$norm is on $blue${fs}$norm. Unsafe delete (y/n)?"
+            echo -e "$1 is on ${fs}. Unsafe delete (y/n)?"
             read -n 1 answer
             case $answer in
  	            [Yy]*)
@@ -121,12 +121,12 @@ ask_fs() {
 # 执行删除
 perform_delete() {
     # "delete" = move to trash
-    if [ -n "$unsafe" ]; then 
-        if [ -n "$verbose" ]; then echo -e "Deleting rm -rf $red$1$norm"; fi
+    if [ -n "$unsafe" ]; then
+        if [ -n "$verbose" ]; then echo -e "Deleting(rm -rf) $1"; fi
         # permanently remove files.
         rm -rf -- "$1"
     else
-        if [ -n "$verbose" ];then echo -e "Moving $blue$k$norm to $red${trash}$norm"; fi
+        if [ -n "$verbose" ];then echo -e "Moving $k to ${trash}"; fi
         # moves and backs up old files
         mv -b -- "$1" "${trash}"
     fi
@@ -135,7 +135,7 @@ perform_delete() {
 ask_nobackup() {
     unset answer
     while true; do
-        echo -e "$blue$k$norm could not be moved to trash. Unsafe delete (y/n)?"
+        echo -e "$k could not be moved to trash. Unsafe delete (y/n)?"
         read -n 1 answer
         case $answer in
             [Yy]*)
@@ -159,7 +159,7 @@ ask_nobackup() {
 # 删除文件
 delete_files() {
     for k in "$@"; do
-        desc="$blue$k$norm";
+        desc="$k";
         complain "${k}"
         if [ -n "$msg" ]; then
             echo -e "$msg $desc"
@@ -180,6 +180,28 @@ delete_files() {
     done
 }
 
+# 清空垃圾桶
+clear_trash() {
+    while true; do
+        echo -e "Do you want to clean the trash can(y/n)?"
+        read -n 1 answer
+        case $answer in
+            [Yy]*)
+                unsafe="yes"
+                perform_delete "$1"
+                ret=$?
+                break
+                ;;
+            [Nn]*)
+                break
+                ;;
+            *)
+                 echo "Please answer y or n."
+                ;;
+        esac
+    done
+}
+
 # 解析参数
 after_opts=""
 for k in "$@"; do
@@ -193,6 +215,12 @@ for k in "$@"; do
         files[++i]="$k"
     fi
 done
+
+# 清理垃圾桶
+if [ -n "$clear" ]; then
+    clear_trash "${trash}"
+    exit 0;
+fi
 
 # 无参数, 提示使用信息
 if [ -z "${files[1]}" ]; then
