@@ -128,7 +128,7 @@ perform_delete() {
     else
         if [ -n "$verbose" ];then echo -e "Moving $k to ${trash}"; fi
         # moves and backs up old files
-        mv -b -- "$1" "${trash}"
+        mv -- "$1" "${trash}"
     fi
 }
 
